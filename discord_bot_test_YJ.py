@@ -11,18 +11,17 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 DISCORD_APP_ID = int(os.getenv("DISCORD_APP_ID"))
 GAG_CHANNEL_ID = int(os.getenv("GAG_CHANNEL_ID"))
 
-
 intents = discord.Intents.default()
 intents.message_content = True
 
+
 class MyBot(commands.Bot):
+
     def __init__(self):
-        super().__init__(
-            command_prefix="!",
-            intents=intents,
-            sync_command=True,
-            application_id=DISCORD_APP_ID
-        )
+        super().__init__(command_prefix="!",
+                         intents=intents,
+                         sync_command=True,
+                         application_id=DISCORD_APP_ID)
         self.gag_channel_id = GAG_CHANNEL_ID  # 이 부분을 올바른 채널 ID로 변경하세요
 
     async def setup_hook(self):
@@ -43,11 +42,12 @@ class MyBot(commands.Bot):
             print(f"태그 everyone가능한지: {permissions.mention_everyone}")
         else:
             print("채널을 찾을수 없음")
-        
-        activity = discord.Game("아재개그 테스트")
-        await self.change_presence(status=discord.Status.online, activity=activity)
 
-    @tasks.loop(seconds=10)
+        activity = discord.Game("아재개그 생각")
+        await self.change_presence(status=discord.Status.online,
+                                   activity=activity)
+
+    @tasks.loop(hours=30)  # minutes=30 seconds hours
     async def gag_task(self):
         print(f"봇이 적용중인 ID: {self.gag_channel_id}")
         channel = self.get_channel(self.gag_channel_id)
@@ -55,8 +55,14 @@ class MyBot(commands.Bot):
         if channel:
             print("Channel found")
             gag = self.get_gag()
-            await channel.send(f"@everyone {gag}")
-            print("Message sent")
+            online_members = self.get_online_members(channel.guild)
+            if online_members:
+                mentions = " ".join(
+                    [member.mention for member in online_members])
+                await channel.send(f"{mentions} {gag}")
+                print("Message sent")
+            else:
+                await channel.send(gag)  # 만약 온라인 멤버가 없다면 그냥 개그만 보냅니다.
         else:
             print("Channel not found")
 
@@ -69,9 +75,18 @@ class MyBot(commands.Bot):
         import random
         return random.choice(gags).strip()
 
+    def get_online_members(self, guild):
+        # 온라인 상태인 멤버를 필터링합니다.
+        online_members = [
+            member for member in guild.members
+            if member.status == discord.Status.online and not member.bot
+        ]
+        return online_members
+
     @app_commands.command(name="ping")
     async def ping(self, ctx: commands.Context) -> None:
         await ctx.send("pong!")
+
 
 bot = MyBot()
 bot.run(DISCORD_TOKEN)
