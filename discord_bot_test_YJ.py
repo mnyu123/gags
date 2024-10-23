@@ -1,18 +1,38 @@
+import random
+from flask import Flask
+from threading import Thread
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 import os
 from dotenv import load_dotenv
 
-load_dotenv()  # .env 파일에서 환경 변수를 로드합니다.
+load_dotenv()
 
-# 환경 변수에서 민감한 정보를 가져옵니다.
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 DISCORD_APP_ID = int(os.getenv("DISCORD_APP_ID"))
 GAG_CHANNEL_ID = int(os.getenv("GAG_CHANNEL_ID"))
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.presences = True  # 이 옵션을 켜야 멤버의 온라인 상태를 가져올 수 있습니다.
+intents.members = True  # 서버 멤버 정보를 가져오기 위해 필요
+
+app = Flask('')
+
+
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 
 
 class MyBot(commands.Bot):
@@ -22,7 +42,7 @@ class MyBot(commands.Bot):
                          intents=intents,
                          sync_command=True,
                          application_id=DISCORD_APP_ID)
-        self.gag_channel_id = GAG_CHANNEL_ID  # 이 부분을 올바른 채널 ID로 변경하세요
+        self.gag_channel_id = GAG_CHANNEL_ID
 
     async def setup_hook(self):
         self.gag_task.start()
@@ -47,22 +67,22 @@ class MyBot(commands.Bot):
         await self.change_presence(status=discord.Status.online,
                                    activity=activity)
 
-    @tasks.loop(hours=30)  # minutes=30 seconds hours
+    @tasks.loop(seconds=60)  # minutes=30 seconds hours
     async def gag_task(self):
         print(f"봇이 적용중인 ID: {self.gag_channel_id}")
         channel = self.get_channel(self.gag_channel_id)
-        print(f"Channel: {channel}")
+        print(f"채널: {channel}")
         if channel:
-            print("Channel found")
+            print("채널 찾음")
             gag = self.get_gag()
             online_members = self.get_online_members(channel.guild)
             if online_members:
-                mentions = " ".join(
-                    [member.mention for member in online_members])
-                await channel.send(f"{mentions} {gag}")
-                print("Message sent")
+                random_member = random.choice(online_members)
+                mention = random_member.mention
+                await channel.send(f"{mention} {gag}")
+                print("메시지 성공적으로 전송완료.")
             else:
-                await channel.send(gag)  # 만약 온라인 멤버가 없다면 그냥 개그만 보냅니다.
+                await channel.send(gag)
         else:
             print("Channel not found")
 
@@ -76,11 +96,11 @@ class MyBot(commands.Bot):
         return random.choice(gags).strip()
 
     def get_online_members(self, guild):
-        # 온라인 상태인 멤버를 필터링합니다.
-        online_members = [
-            member for member in guild.members
-            if member.status == discord.Status.online and not member.bot
-        ]
+        # 서버에서 온라인,자리비움 상태인 멤버를 가져옵니다.
+        online_members = []
+        for member in guild.members:
+            if member.status in [discord.Status.online, discord.Status.idle] and not member.bot:
+                online_members.append(member)
         return online_members
 
     @app_commands.command(name="ping")
@@ -89,4 +109,6 @@ class MyBot(commands.Bot):
 
 
 bot = MyBot()
+
+keep_alive()  # 이 함수로 웹 서버가 실행됩니다.
 bot.run(DISCORD_TOKEN)
